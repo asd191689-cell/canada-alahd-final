@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 import { API_URL } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import AppTopNav from "@/components/AppTopNav";
