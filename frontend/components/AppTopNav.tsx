@@ -119,14 +119,14 @@ export default function AppTopNav({
     if (href === "/families") {
       return (
         pathname === "/families" ||
-        (pathname.startsWith("/families/") &&
-          !pathname.startsWith("/families/add"))
+        (pathname?.startsWith("/families") &&
+          !pathname?.startsWith("/families/add"))
       );
     }
 
     if (href === "/families/add") return pathname === "/families/add";
     if (href === "/reports")
-      return pathname === "/reports" || pathname.startsWith("/reports/");
+      return pathname === "/reports" || pathname?.startsWith("/reports/");
     return pathname === href;
   };
 

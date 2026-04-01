@@ -39,8 +39,7 @@ type MemberForm = {
 export default function EditFamilyPage() {
   const params = useParams();
   const router = useRouter();
-  const fileNumber = params.fileNumber as string;
-
+  const fileNumber = params?.fileNumber ?? ""; // استخدام optional chaining
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");

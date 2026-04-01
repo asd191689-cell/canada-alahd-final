@@ -19,7 +19,7 @@ function DocumentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const familyFromQuery = searchParams.get("family") || "";
+  const familyFromQuery = searchParams?.get("family") || "";
 
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);

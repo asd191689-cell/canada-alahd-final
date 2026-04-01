@@ -41,8 +41,7 @@ type Member = {
 export default function FamilyReportPage() {
   const params = useParams();
   const router = useRouter();
-  const fileNumber = params.id as string;
-
+  const fileNumber = params?.id ?? ""; // استخدم Optional Chaining
   const [family, setFamily] = useState<Family | null>(null);
   const [wife, setWife] = useState<Wife | null>(null);
   const [members, setMembers] = useState<Member[]>([]);

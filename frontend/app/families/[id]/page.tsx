@@ -1,4 +1,5 @@
 "use client";
+
 import { API_URL } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -47,7 +48,9 @@ type DocumentItem = {
 export default function FamilyProfilePage() {
   const params = useParams();
   const router = useRouter();
-  const fileNumber = params.id as string;
+  const fileNumber = Array.isArray(params?.id)
+    ? params.id[0]
+    : (params?.id ?? "");
 
   const [family, setFamily] = useState<Family | null>(null);
   const [wife, setWife] = useState<Wife | null>(null);
@@ -173,7 +176,11 @@ export default function FamilyProfilePage() {
   };
 
   useEffect(() => {
-    loadFamilyData();
+    if (fileNumber) {
+      loadFamilyData();
+    } else {
+      setLoading(false);
+    }
   }, [fileNumber]);
 
   const pageStyle: React.CSSProperties = {
@@ -397,12 +404,9 @@ export default function FamilyProfilePage() {
     if (!confirmed) return;
 
     try {
-      const response = await fetch(
-        `http://localhost:4000/documents/${documentId}`,
-        {
-          method: "DELETE",
-        },
-      );
+      const response = await fetch(`${API_URL}/documents/${documentId}`, {
+        method: "DELETE",
+      });
 
       const data = await response.json();
 
@@ -456,20 +460,17 @@ export default function FamilyProfilePage() {
     try {
       setSaving(true);
 
-      const response = await fetch(
-        `http://localhost:4000/families/${fileNumber}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            family: editFamily,
-            wife: editWife,
-            members: editMembers,
-          }),
+      const response = await fetch(`${API_URL}/families/${fileNumber}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          family: editFamily,
+          wife: editWife,
+          members: editMembers,
+        }),
+      });
 
       const data = await response.json();
 
@@ -478,18 +479,15 @@ export default function FamilyProfilePage() {
       }
 
       for (const doc of editDocuments) {
-        const docResponse = await fetch(
-          `http://localhost:4000/documents/${doc.id}`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              docType: doc.doc_type || "وثيقة",
-            }),
+        const docResponse = await fetch(`${API_URL}/documents/${doc.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
           },
-        );
+          body: JSON.stringify({
+            docType: doc.doc_type || "وثيقة",
+          }),
+        });
 
         const docData = await docResponse.json();
 
