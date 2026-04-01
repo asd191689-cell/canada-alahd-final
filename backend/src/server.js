@@ -1,11 +1,10 @@
 require("dotenv").config();
 
+const { put, del } = require("@vercel/blob");
 const express = require("express");
 const cors = require("cors");
 const { Pool } = require("pg");
 const multer = require("multer");
-const path = require("path");
-const fs = require("fs");
 const bcrypt = require("bcryptjs");
 
 const app = express();
@@ -19,24 +18,12 @@ app.use(
 
 app.use(express.json());
 
-const uploadsDir = path.join(__dirname, "..", "uploads");
-if (!fs.existsSync(uploadsDir)) {
-  fs.mkdirSync(uploadsDir, { recursive: true });
-}
-
-app.use("/uploads", express.static(uploadsDir));
-
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadsDir);
-  },
-  filename: function (req, file, cb) {
-    const uniqueName = `${Date.now()}-${file.originalname.replace(/\s+/g, "-")}`;
-    cb(null, uniqueName);
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 10 * 1024 * 1024,
   },
 });
-
-const upload = multer({ storage });
 
 const pool = new Pool({
   user: process.env.DB_USER || "postgres",
@@ -68,6 +55,7 @@ function calculateFamilyMembersCount(family, members) {
   const membersCount = Array.isArray(members) ? members.length : 0;
   return 1 + wifeCount + membersCount;
 }
+
 app.get("/", (req, res) => {
   res.json({ message: "Backend is working" });
 });
@@ -733,12 +721,13 @@ app.delete("/families/:fileNumber", async (req, res) => {
 
     for (const doc of docsResult.rows) {
       if (doc.file_url) {
-        const fileName = doc.file_url.split("/uploads/")[1];
-        if (fileName) {
-          const filePath = path.join(uploadsDir, fileName);
-          if (fs.existsSync(filePath)) {
-            fs.unlinkSync(filePath);
-          }
+        try {
+          await del(doc.file_url);
+        } catch (blobError) {
+          console.error(
+            "Blob delete error while deleting family files:",
+            blobError,
+          );
         }
       }
     }
@@ -825,7 +814,19 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
     }
 
     const familyId = familyResult.rows[0].id;
-    const fileUrl = `http://localhost:4000/uploads/${req.file.filename}`;
+
+    const safeFileName = req.file.originalname.replace(/\s+/g, "-");
+    const blob = await put(
+      `documents/${fileNumber}/${Date.now()}-${safeFileName}`,
+      req.file.buffer,
+      {
+        access: "public",
+        addRandomSuffix: true,
+        contentType: req.file.mimetype,
+      },
+    );
+
+    const fileUrl = blob.url;
 
     await pool.query(
       `
@@ -915,12 +916,10 @@ app.delete("/documents/:id", async (req, res) => {
     const document = docResult.rows[0];
 
     if (document.file_url) {
-      const fileName = document.file_url.split("/uploads/")[1];
-      if (fileName) {
-        const filePath = path.join(uploadsDir, fileName);
-        if (fs.existsSync(filePath)) {
-          fs.unlinkSync(filePath);
-        }
+      try {
+        await del(document.file_url);
+      } catch (blobError) {
+        console.error("Blob delete error:", blobError);
       }
     }
 
@@ -1137,8 +1136,4 @@ app.get("/export", async (req, res) => {
   }
 });
 
-app.listen(Number(process.env.PORT || 4000), () => {
-  console.log(
-    `Backend running on http://localhost:${Number(process.env.PORT || 4000)}`,
-  );
-});
+module.exports = app;

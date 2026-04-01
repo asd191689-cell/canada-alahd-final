@@ -8,6 +8,7 @@
     "hash-admin": "node src/hash-admin.js"
   },
   "dependencies": {
+    "@vercel/blob": "^2.3.2",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^17.3.1",
