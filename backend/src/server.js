@@ -9,9 +9,30 @@ const bcrypt = require("bcryptjs");
 
 const app = express();
 
+const allowedOrigins = [
+  process.env.FRONTEND_URL,
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "https://canada-alahd-final.vercel.app",
+].filter(Boolean);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:3000",
+    origin: (origin, callback) => {
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      const isAllowedExact = allowedOrigins.includes(origin);
+      const isAllowedVercelPreview =
+        origin.endsWith(".vercel.app") && origin.includes("canada-alahd-final");
+
+      if (isAllowedExact || isAllowedVercelPreview) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`Not allowed by CORS: ${origin}`));
+    },
     credentials: true,
   }),
 );
@@ -31,6 +52,19 @@ const pool = new Pool({
     rejectUnauthorized: false,
   },
 });
+
+const BLOB_TOKEN = process.env.BLOB_READ_WRITE_TOKEN || "";
+
+function ensureBlobToken() {
+  if (!BLOB_TOKEN) {
+    const error = new Error(
+      "BLOB_READ_WRITE_TOKEN is missing from backend environment variables",
+    );
+    error.code = "BLOB_TOKEN_MISSING";
+    throw error;
+  }
+}
+
 function calculateAge(birthDate) {
   if (!birthDate) return null;
 
@@ -169,6 +203,7 @@ app.get("/dashboard/stats", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "خطأ في جلب الإحصائيات",
+      details: error.message,
     });
   }
 });
@@ -196,6 +231,7 @@ app.get("/families", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "خطأ في جلب العائلات",
+      details: error.message,
     });
   }
 });
@@ -720,7 +756,10 @@ app.delete("/families/:fileNumber", async (req, res) => {
     for (const doc of docsResult.rows) {
       if (doc.file_url) {
         try {
-          await del(doc.file_url);
+          ensureBlobToken();
+          await del(doc.file_url, {
+            token: BLOB_TOKEN,
+          });
         } catch (blobError) {
           console.error(
             "Blob delete error while deleting family files:",
@@ -794,6 +833,8 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
       });
     }
 
+    ensureBlobToken();
+
     const familyResult = await pool.query(
       `
       SELECT id
@@ -812,15 +853,16 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
     }
 
     const familyId = familyResult.rows[0].id;
-
     const safeFileName = req.file.originalname.replace(/\s+/g, "-");
+
     const blob = await put(
       `documents/${fileNumber}/${Date.now()}-${safeFileName}`,
       req.file.buffer,
       {
         access: "public",
         addRandomSuffix: true,
-        contentType: req.file.mimetype,
+        contentType: req.file.mimetype || "application/octet-stream",
+        token: BLOB_TOKEN,
       },
     );
 
@@ -836,7 +878,7 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
       )
       VALUES ($1, $2, $3, NOW())
       `,
-      [familyId, docType || "وثيقة", fileUrl],
+      [familyId, docType || "وثيقة_أخرى", fileUrl],
     );
 
     return res.json({
@@ -846,6 +888,27 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
     });
   } catch (error) {
     console.error("Upload document error:", error);
+
+    if (error?.code === "BLOB_TOKEN_MISSING") {
+      return res.status(500).json({
+        success: false,
+        message: "متغير BLOB_READ_WRITE_TOKEN غير موجود في إعدادات الباك إند",
+        details: error.message,
+      });
+    }
+
+    if (
+      error?.message?.includes("Access denied") ||
+      error?.name === "BlobAccessError"
+    ) {
+      return res.status(500).json({
+        success: false,
+        message:
+          "توكن Vercel Blob غير صحيح أو غير مربوط بنفس Blob Store الخاصة بمشروع الباك إند",
+        details: error.message,
+      });
+    }
+
     return res.status(500).json({
       success: false,
       message: "حدث خطأ أثناء رفع الوثيقة",
@@ -866,7 +929,7 @@ app.put("/documents/:id", async (req, res) => {
       WHERE id = $2
       RETURNING id
       `,
-      [docType || "وثيقة", id],
+      [docType || "وثيقة_أخرى", id],
     );
 
     if (result.rows.length === 0) {
@@ -915,7 +978,10 @@ app.delete("/documents/:id", async (req, res) => {
 
     if (document.file_url) {
       try {
-        await del(document.file_url);
+        ensureBlobToken();
+        await del(document.file_url, {
+          token: BLOB_TOKEN,
+        });
       } catch (blobError) {
         console.error("Blob delete error:", blobError);
       }
@@ -964,6 +1030,7 @@ app.get("/documents", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "خطأ في جلب الوثائق",
+      details: error.message,
     });
   }
 });
@@ -1006,6 +1073,7 @@ app.get("/audit", async (req, res) => {
     res.status(500).json({
       success: false,
       message: "خطأ في جلب سجل التعديلات",
+      details: error.message,
     });
   }
 });
