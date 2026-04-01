@@ -1,4 +1,5 @@
 "use client";
+
 import { API_URL } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -39,7 +40,10 @@ type MemberForm = {
 export default function EditFamilyPage() {
   const params = useParams();
   const router = useRouter();
-  const fileNumber = params?.fileNumber ?? ""; // استخدام optional chaining
+  const fileNumber = Array.isArray(params?.fileNumber)
+    ? params.fileNumber[0]
+    : (params?.fileNumber ?? "");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
@@ -105,6 +109,11 @@ export default function EditFamilyPage() {
   }, [wife.name, members.length]);
 
   useEffect(() => {
+    if (!fileNumber) {
+      setLoading(false);
+      return;
+    }
+
     const loadFamily = async () => {
       try {
         setLoading(true);
@@ -184,32 +193,29 @@ export default function EditFamilyPage() {
         throw new Error("يرجى إدخال رقم هوية رب الأسرة");
       }
 
-      const response = await fetch(
-        `http://localhost:4000/families/${fileNumber}`,
-        {
-          method: "PUT",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            family: {
-              ...family,
-              age: fatherAge ? Number(fatherAge) : null,
-              family_members_count: familyMembersCount,
-            },
-            wife: {
-              ...wife,
-              age: wifeAge ? Number(wifeAge) : null,
-            },
-            members: members.map((member) => ({
-              ...member,
-              age: member.birth_date
-                ? Number(calculateAge(member.birth_date))
-                : null,
-            })),
-          }),
+      const response = await fetch(`${API_URL}/families/${fileNumber}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({
+          family: {
+            ...family,
+            age: fatherAge ? Number(fatherAge) : null,
+            family_members_count: familyMembersCount,
+          },
+          wife: {
+            ...wife,
+            age: wifeAge ? Number(wifeAge) : null,
+          },
+          members: members.map((member) => ({
+            ...member,
+            age: member.birth_date
+              ? Number(calculateAge(member.birth_date))
+              : null,
+          })),
+        }),
+      });
 
       const data = await response.json();
 
