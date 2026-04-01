@@ -1,0 +1,27 @@
+{
+  "name": "canada-alahd",
+  "version": "1.0.0",
+  "description": "A project to manage families",
+  "homepage": "https://github.com/asd191689-cell/canada-alahd-final#readme",
+  "bugs": {
+    "url": "https://github.com/asd191689-cell/canada-alahd-final/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/asd191689-cell/canada-alahd-final.git"
+  },
+  "license": "ISC",
+  "author": "M.Ibrahim-Al-Odaini",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start"
+  },
+  "dependencies": {
+    "next": "^16.2.1",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4"
+  }
+}

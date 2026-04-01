@@ -113,20 +113,29 @@ export default function AppTopNav({
       : "0 4px 10px rgba(15,23,42,0.03)",
   });
 
-  const isActive = (href: string) => {
-    if (href === "/dashboard") return pathname === "/dashboard";
+  const isActive = (href: string): boolean => {
+    if (!pathname) return false;
+
+    if (href === "/dashboard") {
+      return pathname === "/dashboard";
+    }
 
     if (href === "/families") {
       return (
         pathname === "/families" ||
-        (pathname?.startsWith("/families") &&
-          !pathname?.startsWith("/families/add"))
+        (pathname.startsWith("/families") &&
+          !pathname.startsWith("/families/add"))
       );
     }
 
-    if (href === "/families/add") return pathname === "/families/add";
-    if (href === "/reports")
-      return pathname === "/reports" || pathname?.startsWith("/reports/");
+    if (href === "/families/add") {
+      return pathname === "/families/add";
+    }
+
+    if (href === "/reports") {
+      return pathname === "/reports" || pathname.startsWith("/reports/");
+    }
+
     return pathname === href;
   };
 
