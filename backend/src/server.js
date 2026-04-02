@@ -1110,10 +1110,16 @@ app.get("/export", async (req, res) => {
               ' | الهوية: ', COALESCE(m.id_number, '-'),
               ' | العمر: ', COALESCE(m.age::text, '-'),
               ' | تاريخ الميلاد: ', COALESCE(TO_CHAR(m.birth_date, 'YYYY-MM-DD'), '-'),
-              ' | الجنس: ', COALESCE(m.gender::text, '-'),
-              ' | الحالة الصحية: ', COALESCE(m.health_status::text, '-')
+              ' | الجنس: ', CASE
+                WHEN m.gender IS NULL THEN '-'
+                ELSE m.gender::text
+              END,
+              ' | الحالة الصحية: ', CASE
+                WHEN m.health_status IS NULL THEN '-'
+                ELSE m.health_status::text
+              END
             ),
-            E'\n'
+            E'\\n'
             ORDER BY m.id
           ) FILTER (WHERE m.id IS NOT NULL),
           ''
@@ -1123,9 +1129,7 @@ app.get("/export", async (req, res) => {
       LEFT JOIN wives w ON w.family_id = f.id
       LEFT JOIN members m ON m.family_id = f.id
       WHERE f.deleted_at IS NULL
-      GROUP BY
-        f.id,
-        w.id
+      GROUP BY f.id, w.id
       ORDER BY f.created_at DESC
     `);
 
