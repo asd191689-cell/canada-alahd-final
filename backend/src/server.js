@@ -1088,7 +1088,7 @@ app.get("/export", async (req, res) => {
         f.age AS head_age,
         f.head_birth_date,
         f.phone,
-        f.head_health_status,
+        f.head_health_status::text AS head_health_status,
         f.has_chronic_disease,
         f.has_disability,
         f.family_members_count,
@@ -1099,7 +1099,7 @@ app.get("/export", async (req, res) => {
         w.id_number AS wife_id_number,
         w.age AS wife_age,
         w.birth_date AS wife_birth_date,
-        w.health_status AS wife_health_status,
+        w.health_status::text AS wife_health_status,
 
         COUNT(m.id) FILTER (WHERE m.id IS NOT NULL) AS members_count,
 
@@ -1110,8 +1110,8 @@ app.get("/export", async (req, res) => {
               ' | الهوية: ', COALESCE(m.id_number, '-'),
               ' | العمر: ', COALESCE(m.age::text, '-'),
               ' | تاريخ الميلاد: ', COALESCE(TO_CHAR(m.birth_date, 'YYYY-MM-DD'), '-'),
-              ' | الجنس: ', COALESCE(m.gender, '-'),
-              ' | الحالة الصحية: ', COALESCE(m.health_status, '-')
+              ' | الجنس: ', COALESCE(m.gender::text, '-'),
+              ' | الحالة الصحية: ', COALESCE(m.health_status::text, '-')
             ),
             E'\n'
             ORDER BY m.id
