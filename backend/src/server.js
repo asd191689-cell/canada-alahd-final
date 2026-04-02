@@ -1,5 +1,5 @@
 require("dotenv").config();
-
+const ExcelJS = require("exceljs");
 const { put, del } = require("@vercel/blob");
 const express = require("express");
 const cors = require("cors");
@@ -1080,8 +1080,9 @@ app.get("/audit", async (req, res) => {
 
 app.get("/export", async (req, res) => {
   try {
-    const result = await pool.query(`
+    const familiesResult = await pool.query(`
       SELECT
+        f.id,
         f.file_number,
         f.head_name,
         f.head_id_number,
@@ -1099,103 +1100,218 @@ app.get("/export", async (req, res) => {
         w.id_number AS wife_id_number,
         w.age AS wife_age,
         w.birth_date AS wife_birth_date,
-        w.health_status::text AS wife_health_status,
-
-        COUNT(m.id) FILTER (WHERE m.id IS NOT NULL) AS members_count,
-
-        COALESCE(
-          STRING_AGG(
-            CONCAT(
-              'الاسم: ', COALESCE(m.full_name, '-'),
-              ' | الهوية: ', COALESCE(m.id_number, '-'),
-              ' | العمر: ', COALESCE(m.age::text, '-'),
-              ' | تاريخ الميلاد: ', COALESCE(TO_CHAR(m.birth_date, 'YYYY-MM-DD'), '-'),
-              ' | الجنس: ', CASE
-                WHEN m.gender IS NULL THEN '-'
-                ELSE m.gender::text
-              END,
-              ' | الحالة الصحية: ', CASE
-                WHEN m.health_status IS NULL THEN '-'
-                ELSE m.health_status::text
-              END
-            ),
-            E'\\n'
-            ORDER BY m.id
-          ) FILTER (WHERE m.id IS NOT NULL),
-          ''
-        ) AS members_details
+        w.health_status::text AS wife_health_status
 
       FROM families f
       LEFT JOIN wives w ON w.family_id = f.id
-      LEFT JOIN members m ON m.family_id = f.id
       WHERE f.deleted_at IS NULL
-      GROUP BY f.id, w.id
       ORDER BY f.created_at DESC
     `);
 
-    const headers = [
-      "رقم الملف",
-      "اسم رب الأسرة",
-      "رقم هوية رب الأسرة",
-      "عمر رب الأسرة",
-      "تاريخ ميلاد رب الأسرة",
-      "رقم الهاتف",
-      "الحالة الصحية لرب الأسرة",
-      "مرض مزمن",
-      "إعاقة",
-      "عدد أفراد الأسرة",
-      "اسم الزوجة",
-      "رقم هوية الزوجة",
-      "عمر الزوجة",
-      "تاريخ ميلاد الزوجة",
-      "الحالة الصحية للزوجة",
-      "عدد الأفراد",
-      "تفاصيل الأفراد",
-      "ملاحظات",
-      "تاريخ إنشاء الملف",
+    const membersResult = await pool.query(`
+      SELECT
+        family_id,
+        full_name,
+        id_number,
+        age,
+        birth_date,
+        gender::text AS gender,
+        health_status::text AS health_status
+      FROM members
+      ORDER BY family_id, id ASC
+    `);
+
+    const membersByFamily = new Map();
+
+    for (const member of membersResult.rows) {
+      if (!membersByFamily.has(member.family_id)) {
+        membersByFamily.set(member.family_id, []);
+      }
+      membersByFamily.get(member.family_id).push(member);
+    }
+
+    let maxMembers = 0;
+    for (const family of familiesResult.rows) {
+      const familyMembers = membersByFamily.get(family.id) || [];
+      if (familyMembers.length > maxMembers) {
+        maxMembers = familyMembers.length;
+      }
+    }
+
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("العائلات");
+
+    const baseColumns = [
+      { header: "رقم الملف", key: "file_number", width: 15 },
+      { header: "اسم رب الأسرة", key: "head_name", width: 22 },
+      { header: "رقم هوية رب الأسرة", key: "head_id_number", width: 22 },
+      { header: "عمر رب الأسرة", key: "head_age", width: 14 },
+      { header: "تاريخ ميلاد رب الأسرة", key: "head_birth_date", width: 18 },
+      { header: "رقم الهاتف", key: "phone", width: 20 },
+      {
+        header: "الحالة الصحية لرب الأسرة",
+        key: "head_health_status",
+        width: 22,
+      },
+      { header: "مرض مزمن", key: "has_chronic_disease", width: 12 },
+      { header: "إعاقة", key: "has_disability", width: 12 },
+      { header: "عدد أفراد الأسرة", key: "family_members_count", width: 16 },
+
+      { header: "اسم الزوجة", key: "wife_name", width: 20 },
+      { header: "رقم هوية الزوجة", key: "wife_id_number", width: 20 },
+      { header: "عمر الزوجة", key: "wife_age", width: 12 },
+      { header: "تاريخ ميلاد الزوجة", key: "wife_birth_date", width: 18 },
+      { header: "الحالة الصحية للزوجة", key: "wife_health_status", width: 22 },
+
+      { header: "عدد الأفراد", key: "members_count", width: 12 },
+      { header: "ملاحظات", key: "notes", width: 28 },
+      { header: "تاريخ إنشاء الملف", key: "created_at", width: 22 },
     ];
 
-    const rows = result.rows.map((row) => [
-      row.file_number || "",
-      row.head_name || "",
-      row.head_id_number || "",
-      row.head_age ?? "",
-      row.head_birth_date ? String(row.head_birth_date).split("T")[0] : "",
-      row.phone || "",
-      row.head_health_status || "",
-      row.has_chronic_disease ? "نعم" : "لا",
-      row.has_disability ? "نعم" : "لا",
-      row.family_members_count ?? "",
-      row.wife_name || "",
-      row.wife_id_number || "",
-      row.wife_age ?? "",
-      row.wife_birth_date ? String(row.wife_birth_date).split("T")[0] : "",
-      row.wife_health_status || "",
-      row.members_count ?? 0,
-      row.members_details || "",
-      row.notes || "",
-      row.created_at ? new Date(row.created_at).toLocaleString("ar-EG") : "",
-    ]);
+    const memberColumns = [];
 
-    const csvContent = [
-      headers.join(","),
-      ...rows.map((row) =>
-        row
-          .map(
-            (value) =>
-              `"${String(value).replace(/"/g, '""').replace(/\n/g, "\r\n")}"`,
-          )
-          .join(","),
-      ),
-    ].join("\n");
+    for (let i = 1; i <= maxMembers; i++) {
+      memberColumns.push(
+        { header: `اسم الفرد ${i}`, key: `member_${i}_full_name`, width: 20 },
+        {
+          header: `رقم هوية الفرد ${i}`,
+          key: `member_${i}_id_number`,
+          width: 22,
+        },
+        { header: `عمر الفرد ${i}`, key: `member_${i}_age`, width: 12 },
+        {
+          header: `تاريخ ميلاد الفرد ${i}`,
+          key: `member_${i}_birth_date`,
+          width: 18,
+        },
+        { header: `جنس الفرد ${i}`, key: `member_${i}_gender`, width: 14 },
+        {
+          header: `الحالة الصحية للفرد ${i}`,
+          key: `member_${i}_health_status`,
+          width: 22,
+        },
+      );
+    }
 
-    res.setHeader("Content-Type", "text/csv; charset=utf-8");
+    worksheet.columns = [...baseColumns, ...memberColumns];
+
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.alignment = { horizontal: "center", vertical: "middle" };
+    headerRow.height = 24;
+
+    for (const cell of headerRow._cells) {
+      cell.fill = {
+        type: "pattern",
+        pattern: "solid",
+        fgColor: { argb: "14532D" },
+      };
+      cell.font = {
+        bold: true,
+        color: { argb: "FFFFFF" },
+      };
+      cell.border = {
+        top: { style: "thin", color: { argb: "D1D5DB" } },
+        left: { style: "thin", color: { argb: "D1D5DB" } },
+        bottom: { style: "thin", color: { argb: "D1D5DB" } },
+        right: { style: "thin", color: { argb: "D1D5DB" } },
+      };
+    }
+
+    for (const family of familiesResult.rows) {
+      const familyMembers = membersByFamily.get(family.id) || [];
+
+      const rowData = {
+        file_number: family.file_number || "",
+        head_name: family.head_name || "",
+        head_id_number: family.head_id_number
+          ? String(family.head_id_number)
+          : "",
+        head_age: family.head_age ?? "",
+        head_birth_date: family.head_birth_date
+          ? String(family.head_birth_date).split("T")[0]
+          : "",
+        phone: family.phone ? String(family.phone) : "",
+        head_health_status: family.head_health_status || "",
+        has_chronic_disease: family.has_chronic_disease ? "نعم" : "لا",
+        has_disability: family.has_disability ? "نعم" : "لا",
+        family_members_count: family.family_members_count ?? "",
+
+        wife_name: family.wife_name || "",
+        wife_id_number: family.wife_id_number
+          ? String(family.wife_id_number)
+          : "",
+        wife_age: family.wife_age ?? "",
+        wife_birth_date: family.wife_birth_date
+          ? String(family.wife_birth_date).split("T")[0]
+          : "",
+        wife_health_status: family.wife_health_status || "",
+
+        members_count: familyMembers.length,
+        notes: family.notes || "",
+        created_at: family.created_at
+          ? new Date(family.created_at).toLocaleString("ar-EG")
+          : "",
+      };
+
+      for (let i = 0; i < maxMembers; i++) {
+        const member = familyMembers[i];
+
+        rowData[`member_${i + 1}_full_name`] = member?.full_name || "";
+        rowData[`member_${i + 1}_id_number`] = member?.id_number
+          ? String(member.id_number)
+          : "";
+        rowData[`member_${i + 1}_age`] = member?.age ?? "";
+        rowData[`member_${i + 1}_birth_date`] = member?.birth_date
+          ? String(member.birth_date).split("T")[0]
+          : "";
+        rowData[`member_${i + 1}_gender`] = member?.gender || "";
+        rowData[`member_${i + 1}_health_status`] = member?.health_status || "";
+      }
+
+      const row = worksheet.addRow(rowData);
+
+      row.alignment = {
+        horizontal: "center",
+        vertical: "middle",
+        wrapText: true,
+      };
+
+      row.eachCell((cell) => {
+        cell.border = {
+          top: { style: "thin", color: { argb: "E5E7EB" } },
+          left: { style: "thin", color: { argb: "E5E7EB" } },
+          bottom: { style: "thin", color: { argb: "E5E7EB" } },
+          right: { style: "thin", color: { argb: "E5E7EB" } },
+        };
+      });
+
+      row.getCell("head_id_number").numFmt = "@";
+      row.getCell("phone").numFmt = "@";
+      row.getCell("wife_id_number").numFmt = "@";
+
+      for (let i = 0; i < maxMembers; i++) {
+        row.getCell(`member_${i + 1}_id_number`).numFmt = "@";
+      }
+    }
+
+    worksheet.views = [{ rightToLeft: true }];
+    worksheet.autoFilter = {
+      from: "A1",
+      to: worksheet.getRow(1).lastCell.address,
+    };
+
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    );
     res.setHeader(
       "Content-Disposition",
-      'attachment; filename="families_full_export.csv"',
+      'attachment; filename="families_full_export.xlsx"',
     );
 
-    res.send("\uFEFF" + csvContent);
+    await workbook.xlsx.write(res);
+    res.end();
   } catch (error) {
     console.error("Export error:", error);
     res.status(500).json({
