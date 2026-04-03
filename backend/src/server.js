@@ -1200,7 +1200,7 @@ app.get("/export", async (req, res) => {
     headerRow.alignment = { horizontal: "center", vertical: "middle" };
     headerRow.height = 24;
 
-    for (const cell of headerRow._cells) {
+    headerRow.eachCell({ includeEmpty: true }, (cell) => {
       cell.fill = {
         type: "pattern",
         pattern: "solid",
@@ -1216,7 +1216,7 @@ app.get("/export", async (req, res) => {
         bottom: { style: "thin", color: { argb: "D1D5DB" } },
         right: { style: "thin", color: { argb: "D1D5DB" } },
       };
-    }
+    });
 
     for (const family of familiesResult.rows) {
       const familyMembers = membersByFamily.get(family.id) || [];
@@ -1296,10 +1296,13 @@ app.get("/export", async (req, res) => {
     }
 
     worksheet.views = [{ rightToLeft: true }];
-    worksheet.autoFilter = {
-      from: "A1",
-      to: worksheet.getRow(1).lastCell.address,
-    };
+
+    if (worksheet.columnCount > 0) {
+      const lastColumnLetter = worksheet.getColumn(
+        worksheet.columnCount,
+      ).letter;
+      worksheet.autoFilter = `A1:${lastColumnLetter}1`;
+    }
 
     res.setHeader(
       "Content-Type",
