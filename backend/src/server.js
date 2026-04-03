@@ -65,21 +65,17 @@ function ensureBlobToken() {
   }
 }
 
-function calculateAge(birthDate) {
-  if (!birthDate) return null;
+function formatDateForExcel(dateValue) {
+  if (!dateValue) return "";
 
-  const birth = new Date(birthDate);
-  if (Number.isNaN(birth.getTime())) return null;
+  const date = new Date(dateValue);
+  if (Number.isNaN(date.getTime())) return "";
 
-  const today = new Date();
-  let age = today.getFullYear() - birth.getFullYear();
-  const monthDiff = today.getMonth() - birth.getMonth();
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const year = date.getFullYear();
 
-  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
-    age--;
-  }
-
-  return age >= 0 ? age : null;
+  return `${day}/${month}/${year}`;
 }
 
 function calculateFamilyMembersCount(family, members) {
@@ -1228,9 +1224,7 @@ app.get("/export", async (req, res) => {
           ? String(family.head_id_number)
           : "",
         head_age: family.head_age ?? "",
-        head_birth_date: family.head_birth_date
-          ? String(family.head_birth_date).split("T")[0]
-          : "",
+        head_birth_date: formatDateForExcel(family.head_birth_date),
         phone: family.phone ? String(family.phone) : "",
         head_health_status: family.head_health_status || "",
         has_chronic_disease: family.has_chronic_disease ? "نعم" : "لا",
@@ -1242,9 +1236,7 @@ app.get("/export", async (req, res) => {
           ? String(family.wife_id_number)
           : "",
         wife_age: family.wife_age ?? "",
-        wife_birth_date: family.wife_birth_date
-          ? String(family.wife_birth_date).split("T")[0]
-          : "",
+        wife_birth_date: formatDateForExcel(family.wife_birth_date),
         wife_health_status: family.wife_health_status || "",
 
         members_count: familyMembers.length,
@@ -1262,9 +1254,9 @@ app.get("/export", async (req, res) => {
           ? String(member.id_number)
           : "";
         rowData[`member_${i + 1}_age`] = member?.age ?? "";
-        rowData[`member_${i + 1}_birth_date`] = member?.birth_date
-          ? String(member.birth_date).split("T")[0]
-          : "";
+        rowData[`member_${i + 1}_birth_date`] = formatDateForExcel(
+          member?.birth_date,
+        );
         rowData[`member_${i + 1}_gender`] = member?.gender || "";
         rowData[`member_${i + 1}_health_status`] = member?.health_status || "";
       }
@@ -1324,5 +1316,4 @@ app.get("/export", async (req, res) => {
     });
   }
 });
-
 module.exports = app;
