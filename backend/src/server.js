@@ -65,6 +65,40 @@ function ensureBlobToken() {
   }
 }
 
+function calculateAge(birthDate) {
+  if (!birthDate) return null;
+
+  const birth = new Date(birthDate);
+  if (Number.isNaN(birth.getTime())) return null;
+
+  const today = new Date();
+  let age = today.getFullYear() - birth.getFullYear();
+  const monthDiff = today.getMonth() - birth.getMonth();
+
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+    age--;
+  }
+
+  return age >= 0 ? age : null;
+}
+
+function calculateFamilyMembersCount(family, members) {
+  const wifeCount = family?.motherName?.trim() ? 1 : 0;
+  const membersCount = Array.isArray(members) ? members.length : 0;
+  return 1 + wifeCount + membersCount;
+}
+
+function normalizeDocType(docType) {
+  const value = String(docType || "").trim();
+  const allowedDocTypes = ["هوية", "صورة شخصية", "وثيقة_أخرى"];
+
+  if (allowedDocTypes.includes(value)) {
+    return value;
+  }
+
+  return "وثيقة_أخرى";
+}
+
 function formatDateForExcel(dateValue) {
   if (!dateValue) return "";
 
@@ -76,18 +110,6 @@ function formatDateForExcel(dateValue) {
   const year = date.getFullYear();
 
   return `${day}/${month}/${year}`;
-}
-
-function normalizeDocType(docType) {
-  const value = String(docType || "").trim();
-
-  const allowedDocTypes = ["هوية", "صورة شخصية", "وثيقة_أخرى"];
-
-  if (allowedDocTypes.includes(value)) {
-    return value;
-  }
-
-  return "وثيقة_أخرى";
 }
 
 app.get("/", (req, res) => {
@@ -853,9 +875,10 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
         message: "العائلة غير موجودة",
       });
     }
-    const safeDocType = normalizeDocType(docType);
+
     const familyId = familyResult.rows[0].id;
     const safeFileName = req.file.originalname.replace(/\s+/g, "-");
+    const safeDocType = normalizeDocType(docType);
 
     const blob = await put(
       `documents/${fileNumber}/${Date.now()}-${safeFileName}`,
@@ -872,14 +895,14 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
 
     await pool.query(
       `
-  INSERT INTO documents (
-    family_id,
-    doc_type,
-    file_url,
-    uploaded_at
-  )
-  VALUES ($1, $2, $3, NOW())
-  `,
+      INSERT INTO documents (
+        family_id,
+        doc_type,
+        file_url,
+        uploaded_at
+      )
+      VALUES ($1, $2, $3, NOW())
+      `,
       [familyId, safeDocType, fileUrl],
     );
 
@@ -925,13 +948,14 @@ app.put("/documents/:id", async (req, res) => {
 
   try {
     const safeDocType = normalizeDocType(docType);
+
     const result = await pool.query(
       `
-  UPDATE documents
-  SET doc_type = $1
-  WHERE id = $2
-  RETURNING id
-  `,
+      UPDATE documents
+      SET doc_type = $1
+      WHERE id = $2
+      RETURNING id
+      `,
       [safeDocType, id],
     );
 
@@ -1323,4 +1347,5 @@ app.get("/export", async (req, res) => {
     });
   }
 });
+
 module.exports = app;
