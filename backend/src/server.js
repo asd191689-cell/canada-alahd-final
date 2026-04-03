@@ -78,10 +78,16 @@ function formatDateForExcel(dateValue) {
   return `${day}/${month}/${year}`;
 }
 
-function calculateFamilyMembersCount(family, members) {
-  const wifeCount = family?.motherName?.trim() ? 1 : 0;
-  const membersCount = Array.isArray(members) ? members.length : 0;
-  return 1 + wifeCount + membersCount;
+function normalizeDocType(docType) {
+  const value = String(docType || "").trim();
+
+  const allowedDocTypes = ["هوية", "صورة شخصية", "وثيقة_أخرى"];
+
+  if (allowedDocTypes.includes(value)) {
+    return value;
+  }
+
+  return "وثيقة_أخرى";
 }
 
 app.get("/", (req, res) => {
@@ -847,7 +853,7 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
         message: "العائلة غير موجودة",
       });
     }
-
+    const safeDocType = normalizeDocType(docType);
     const familyId = familyResult.rows[0].id;
     const safeFileName = req.file.originalname.replace(/\s+/g, "-");
 
@@ -866,15 +872,15 @@ app.post("/documents/upload", upload.single("file"), async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO documents (
-        family_id,
-        doc_type,
-        file_url,
-        uploaded_at
-      )
-      VALUES ($1, $2, $3, NOW())
-      `,
-      [familyId, docType || "وثيقة_أخرى", fileUrl],
+  INSERT INTO documents (
+    family_id,
+    doc_type,
+    file_url,
+    uploaded_at
+  )
+  VALUES ($1, $2, $3, NOW())
+  `,
+      [familyId, safeDocType, fileUrl],
     );
 
     return res.json({
@@ -918,14 +924,15 @@ app.put("/documents/:id", async (req, res) => {
   const { docType } = req.body;
 
   try {
+    const safeDocType = normalizeDocType(docType);
     const result = await pool.query(
       `
-      UPDATE documents
-      SET doc_type = $1
-      WHERE id = $2
-      RETURNING id
-      `,
-      [docType || "وثيقة_أخرى", id],
+  UPDATE documents
+  SET doc_type = $1
+  WHERE id = $2
+  RETURNING id
+  `,
+      [safeDocType, id],
     );
 
     if (result.rows.length === 0) {
