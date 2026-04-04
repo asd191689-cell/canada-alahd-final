@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { upload } from "@vercel/blob/client";
 import AppTopNav from "@/components/AppTopNav";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { API_URL } from "@/lib/api";
@@ -15,6 +16,8 @@ type DocumentItem = {
   head_name?: string;
 };
 
+const DOC_TYPE_OPTIONS = ["هوية", "صورة شخصية", "وثيقة_أخرى"];
+
 function DocumentsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -26,7 +29,7 @@ function DocumentsPageContent() {
   const [uploading, setUploading] = useState(false);
 
   const [fileNumber, setFileNumber] = useState(familyFromQuery);
-  const [docType, setDocType] = useState("");
+  const [docType, setDocType] = useState("وثيقة_أخرى");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const [search, setSearch] = useState(familyFromQuery);
@@ -87,7 +90,7 @@ function DocumentsPageContent() {
     }
 
     if (!docType.trim()) {
-      setErrorMessage("يرجى إدخال نوع الوثيقة");
+      setErrorMessage("يرجى اختيار نوع الوثيقة");
       return;
     }
 
@@ -99,24 +102,42 @@ function DocumentsPageContent() {
     try {
       setUploading(true);
 
-      const formData = new FormData();
-      formData.append("fileNumber", fileNumber.trim());
-      formData.append("docType", docType.trim());
-      formData.append("file", selectedFile);
+      const safeDocType = DOC_TYPE_OPTIONS.includes(docType.trim())
+        ? docType.trim()
+        : "وثيقة_أخرى";
 
-      const response = await fetch(`${API_URL}/documents/upload`, {
-        method: "POST",
-        body: formData,
+      const blob = await upload(selectedFile.name, selectedFile, {
+        access: "public",
+        handleUploadUrl: "/api/blob/upload",
+        clientPayload: JSON.stringify({
+          fileNumber: fileNumber.trim(),
+          docType: safeDocType,
+        }),
       });
 
-      const data = await response.json();
+      const registerResponse = await fetch(
+        `${API_URL}/documents/register-upload`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            fileNumber: fileNumber.trim(),
+            docType: safeDocType,
+            fileUrl: blob.url,
+          }),
+        },
+      );
 
-      if (!response.ok || !data.success) {
-        throw new Error(data.message || "فشل في رفع الوثيقة");
+      const registerData = await registerResponse.json();
+
+      if (!registerResponse.ok || !registerData.success) {
+        throw new Error(registerData.message || "فشل في تسجيل الوثيقة");
       }
 
       setSuccessMessage("تم رفع الوثيقة بنجاح");
-      setDocType("");
+      setDocType("وثيقة_أخرى");
       setSelectedFile(null);
 
       await fetchDocuments();
@@ -390,12 +411,17 @@ function DocumentsPageContent() {
 
             <div>
               <label style={labelStyle}>نوع الوثيقة</label>
-              <input
+              <select
                 style={inputStyle}
                 value={docType}
                 onChange={(e) => setDocType(e.target.value)}
-                placeholder="مثال: هوية، شهادة ميلاد، تقرير طبي"
-              />
+              >
+                {DOC_TYPE_OPTIONS.map((option) => (
+                  <option key={option} value={option}>
+                    {option}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
@@ -411,6 +437,7 @@ function DocumentsPageContent() {
                   color: "#111827",
                   fontWeight: "600",
                 }}
+                accept=".pdf,image/png,image/jpeg,image/webp"
               />
 
               <div
@@ -424,6 +451,17 @@ function DocumentsPageContent() {
                 {selectedFile
                   ? `الملف المحدد: ${selectedFile.name}`
                   : "لم يتم اختيار ملف بعد"}
+              </div>
+
+              <div
+                style={{
+                  marginTop: "8px",
+                  color: "#6b7280",
+                  fontSize: "13px",
+                  fontWeight: "600",
+                }}
+              >
+                الأنواع المسموحة: PDF / PNG / JPG / WEBP
               </div>
             </div>
           </div>
