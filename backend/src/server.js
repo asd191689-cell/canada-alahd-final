@@ -839,6 +839,71 @@ app.delete("/families/:fileNumber", async (req, res) => {
   }
 });
 
+app.post("/documents/register-upload", async (req, res) => {
+  try {
+    const { fileNumber, docType, fileUrl } = req.body;
+
+    if (!fileNumber) {
+      return res.status(400).json({
+        success: false,
+        message: "رقم الملف مطلوب",
+      });
+    }
+
+    if (!fileUrl) {
+      return res.status(400).json({
+        success: false,
+        message: "رابط الملف مطلوب",
+      });
+    }
+
+    const familyResult = await pool.query(
+      `
+      SELECT id
+      FROM families
+      WHERE file_number = $1 AND deleted_at IS NULL
+      LIMIT 1
+      `,
+      [String(fileNumber).trim()],
+    );
+
+    if (familyResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "العائلة غير موجودة",
+      });
+    }
+
+    const familyId = familyResult.rows[0].id;
+    const safeDocType = normalizeDocType(docType);
+
+    await pool.query(
+      `
+      INSERT INTO documents (
+        family_id,
+        doc_type,
+        file_url,
+        uploaded_at
+      )
+      VALUES ($1, $2, $3, NOW())
+      `,
+      [familyId, safeDocType, String(fileUrl).trim()],
+    );
+
+    return res.json({
+      success: true,
+      message: "تم تسجيل الوثيقة بنجاح",
+    });
+  } catch (error) {
+    console.error("Register uploaded document error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "حدث خطأ أثناء تسجيل الوثيقة",
+      details: error.message,
+    });
+  }
+});
+
 app.post("/documents/upload", upload.single("file"), async (req, res) => {
   try {
     const { fileNumber, docType } = req.body;
